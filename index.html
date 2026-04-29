@@ -1604,7 +1604,7 @@ h1.headline em {
         <div class="form-meta">No spam · Unsubscribe anytime · Your data stays yours</div>
       </div>
 
-      <form class="waitlist" id="waitlist-form" action="REPLACE_WITH_YOUR_FORM_ENDPOINT" method="POST">
+      <form class="waitlist" id="waitlist-form" action="https://formspree.io/f/mwvyerbr" method="POST">
         <div class="field">
           <label class="field-label" for="email">Email</label>
           <input type="email" id="email" name="email" required placeholder="you@company.com" autocomplete="email" />
@@ -1713,7 +1713,7 @@ const success = document.getElementById('success');
 
 form.addEventListener('submit', function (e) {
   const action = form.getAttribute('action');
-  if (!action || action === 'REPLACE_WITH_YOUR_FORM_ENDPOINT') {
+  if (!action || action === 'https://formspree.io/f/mwvyerbr') {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(form).entries());
     data.tools = Array.from(form.querySelectorAll('input[name="tool"]:checked'))
