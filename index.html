@@ -1,0 +1,1729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Polish — Verify your AI meeting summary before you send it</title>
+<meta name="description" content="Polish cross-checks Otter, Fathom, Granola, Zoom, and Teams summaries against your transcript and flags hallucinations before you hit send." />
+<meta name="theme-color" content="#0a0a0c" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#f7f5ef" media="(prefers-color-scheme: light)" />
+<link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='8' fill='%23f59e0b'/></svg>" />
+
+<!-- Preempt theme flash -->
+<script>
+(function() {
+  try {
+    var saved = localStorage.getItem('polish-theme');
+    if (saved) {
+      document.documentElement.setAttribute('data-theme', saved);
+    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  } catch(e) {}
+})();
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<style>
+:root {
+  /* DARK (default) */
+  --bg: #0a0a0c;
+  --bg-elevated: #131316;
+  --bg-card: #18181c;
+  --border: #26262b;
+  --border-bright: #34343a;
+  --text: #fafafa;
+  --text-muted: #9b9ba3;
+  --text-faint: #5f5f67;
+  --amber: #f59e0b;
+  --amber-glow: #fbbf24;
+  --amber-text: #fbbf24;
+  --violet: #a855f7;
+  --violet-deep: #7c3aed;
+  --green: #22c55e;
+  --green-soft: #86efac;
+  --red: #ef4444;
+  --red-soft: #fca5a5;
+
+  --grid-line: rgba(255, 255, 255, 0.012);
+  --glow-1: rgba(245, 158, 11, 0.18);
+  --glow-2: rgba(168, 85, 247, 0.14);
+  --shadow-strong: rgba(0, 0, 0, 0.6);
+
+  --row-hallucinated-bg: rgba(239, 68, 68, 0.04);
+  --row-verify-bg: rgba(245, 158, 11, 0.05);
+  --row-added-bg: rgba(34, 197, 94, 0.04);
+
+  --tag-removed-bg: rgba(239, 68, 68, 0.12);
+  --tag-removed-border: rgba(239, 68, 68, 0.3);
+  --tag-verify-bg: rgba(245, 158, 11, 0.12);
+  --tag-verify-border: rgba(245, 158, 11, 0.35);
+  --tag-added-bg: rgba(34, 197, 94, 0.12);
+  --tag-added-border: rgba(34, 197, 94, 0.3);
+
+  --max: 1200px;
+
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+[data-theme="light"] {
+  --bg: #f7f5ef;
+  --bg-elevated: #ffffff;
+  --bg-card: #fdfbf5;
+  --border: #e5e0d4;
+  --border-bright: #c8c1b1;
+  --text: #1c1917;
+  --text-muted: #57534e;
+  --text-faint: #9c9486;
+  --amber: #b45309;
+  --amber-glow: #c2410c;
+  --amber-text: #b45309;
+  --violet: #7c3aed;
+  --violet-deep: #6d28d9;
+  --green: #15803d;
+  --green-soft: #166534;
+  --red: #b91c1c;
+  --red-soft: #991b1b;
+
+  --grid-line: rgba(28, 25, 23, 0.025);
+  --glow-1: rgba(180, 83, 9, 0.10);
+  --glow-2: rgba(124, 58, 237, 0.07);
+  --shadow-strong: rgba(28, 25, 23, 0.12);
+
+  --row-hallucinated-bg: rgba(185, 28, 28, 0.05);
+  --row-verify-bg: rgba(180, 83, 9, 0.07);
+  --row-added-bg: rgba(21, 128, 61, 0.05);
+
+  --tag-removed-bg: rgba(185, 28, 28, 0.10);
+  --tag-removed-border: rgba(185, 28, 28, 0.35);
+  --tag-verify-bg: rgba(180, 83, 9, 0.10);
+  --tag-verify-border: rgba(180, 83, 9, 0.40);
+  --tag-added-bg: rgba(21, 128, 61, 0.10);
+  --tag-added-border: rgba(21, 128, 61, 0.35);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  scroll-behavior: smooth;
+  background: var(--bg);
+  transition: background 0.3s ease;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+::selection { background: var(--amber); color: white; }
+
+.mono { font-family: var(--font-mono); }
+
+.wrap { max-width: var(--max); margin: 0 auto; padding: 0 32px; }
+
+/* ---------- Background ambient glows ---------- */
+.ambient {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  transition: opacity 0.3s ease;
+}
+
+.ambient::before, .ambient::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+}
+.ambient::before {
+  top: -200px;
+  left: -10%;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, var(--glow-1) 0%, transparent 65%);
+  animation: drift1 20s ease-in-out infinite;
+}
+.ambient::after {
+  top: 30%;
+  right: -10%;
+  width: 700px;
+  height: 700px;
+  background: radial-gradient(circle, var(--glow-2) 0%, transparent 65%);
+  animation: drift2 25s ease-in-out infinite;
+}
+
+@keyframes drift1 {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(80px, 60px); }
+}
+@keyframes drift2 {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-60px, 40px); }
+}
+
+/* Grid texture overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 64px 64px;
+  pointer-events: none;
+  z-index: 1;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+}
+
+main, header, footer { position: relative; z-index: 2; }
+
+/* ---------- Top nav ---------- */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+.nav-inner {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 18px 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.logo-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--amber);
+  border-radius: 50%;
+  box-shadow: 0 0 16px var(--amber-glow);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.theme-toggle {
+  background: transparent;
+  border: 1px solid var(--border);
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  font-family: var(--font-sans);
+}
+.theme-toggle:hover {
+  border-color: var(--border-bright);
+  color: var(--text);
+}
+.theme-toggle .moon { display: none; }
+.theme-toggle .sun { display: block; }
+[data-theme="light"] .theme-toggle .sun { display: none; }
+[data-theme="light"] .theme-toggle .moon { display: block; }
+
+.nav-cta {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border: 1px solid var(--border);
+  padding: 8px 16px;
+  border-radius: 9px;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+.nav-cta:hover {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  border-color: var(--border-bright);
+}
+
+/* ---------- Hero ---------- */
+.hero {
+  padding: 96px 0 80px;
+  position: relative;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 25%, transparent);
+  border-radius: 100px;
+  padding: 6px 14px 6px 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--amber-text);
+  margin-bottom: 28px;
+}
+.eyebrow-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--amber);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--amber);
+}
+
+h1.headline {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: clamp(40px, 6.2vw, 78px);
+  line-height: 1.06;
+  letter-spacing: -0.035em;
+  max-width: 18ch;
+  margin-bottom: 32px;
+  color: var(--text);
+}
+h1.headline em {
+  font-style: normal;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--amber-glow) 0%, var(--amber) 50%, var(--violet) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  display: inline-block;
+}
+
+.lede {
+  font-family: var(--font-sans);
+  font-size: 19px;
+  line-height: 1.55;
+  max-width: 58ch;
+  color: var(--text-muted);
+  margin-bottom: 36px;
+  font-weight: 400;
+}
+.lede strong {
+  color: var(--text);
+  font-weight: 600;
+  background-image: linear-gradient(
+    transparent 65%,
+    color-mix(in srgb, var(--amber) 22%, transparent) 65%,
+    color-mix(in srgb, var(--amber) 22%, transparent) 95%,
+    transparent 95%
+  );
+  padding: 0 2px;
+}
+
+.hero-cta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 36px;
+}
+
+.btn-primary {
+  background: var(--text);
+  color: var(--bg);
+  border: none;
+  padding: 14px 26px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  border-radius: 10px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 22%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 28%, transparent),
+    0 0 32px color-mix(in srgb, var(--amber) 35%, transparent);
+}
+.btn-primary svg { transition: transform 0.15s ease; }
+.btn-primary:hover svg { transform: translateX(2px); }
+
+.btn-ghost {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 14px 0;
+  transition: color 0.15s ease;
+  font-weight: 500;
+}
+.btn-ghost:hover { color: var(--text); }
+
+.hero-meta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.hero-meta span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.hero-meta span::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  background: var(--text-faint);
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* ---------- Terminal demo ---------- */
+.demo-container {
+  margin-top: 64px;
+  position: relative;
+}
+
+.demo-glow {
+  position: absolute;
+  inset: -80px;
+  background:
+    radial-gradient(circle at 30% 50%, var(--glow-1) 0%, transparent 50%),
+    radial-gradient(circle at 70% 50%, var(--glow-2) 0%, transparent 50%);
+  filter: blur(40px);
+  z-index: -1;
+  opacity: 0.8;
+}
+
+.terminal {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--text) 4%, transparent) inset,
+    0 32px 64px -24px var(--shadow-strong),
+    0 0 80px -20px color-mix(in srgb, var(--amber) 15%, transparent);
+}
+
+.terminal-header {
+  background: color-mix(in srgb, var(--bg) 50%, transparent);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.terminal-dots {
+  display: flex;
+  gap: 7px;
+}
+.terminal-dots span {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--border-bright);
+}
+.terminal-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+  margin-left: 8px;
+}
+.terminal-title strong { color: var(--text-muted); font-weight: 500; }
+
+.terminal-body {
+  padding: 28px 32px 32px;
+  font-family: var(--font-sans);
+}
+
+.doc-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+  margin-bottom: 20px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.doc-meta span.bright { color: var(--text-muted); }
+
+.doc-title {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: -0.018em;
+  margin-bottom: 18px;
+  color: var(--text);
+}
+
+.doc-summary {
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+  max-width: 65ch;
+}
+
+.actions-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.action-row {
+  padding: 12px 14px;
+  border-radius: 8px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  font-size: 14.5px;
+  line-height: 1.55;
+  transition: background 0.15s ease;
+  position: relative;
+}
+.action-row:hover {
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+
+.action-id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  letter-spacing: 0.06em;
+  min-width: 28px;
+  margin-top: 3px;
+}
+
+.action-row.hallucinated {
+  background: var(--row-hallucinated-bg);
+  border-left: 2px solid var(--red);
+}
+.action-row.hallucinated .action-text {
+  text-decoration: line-through;
+  text-decoration-color: var(--red);
+  text-decoration-thickness: 1.5px;
+  color: var(--text-faint);
+}
+.action-row.verify {
+  background: var(--row-verify-bg);
+  border-left: 2px solid var(--amber);
+}
+.action-row.added {
+  background: var(--row-added-bg);
+  border-left: 2px solid var(--green);
+}
+
+.action-row strong { color: var(--text); font-weight: 600; }
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-right: 8px;
+  vertical-align: 1px;
+  text-transform: uppercase;
+}
+.tag.removed {
+  background: var(--tag-removed-bg);
+  color: var(--red-soft);
+  border: 1px solid var(--tag-removed-border);
+}
+.tag.verify {
+  background: var(--tag-verify-bg);
+  color: var(--amber-text);
+  border: 1px solid var(--tag-verify-border);
+}
+.tag.added {
+  background: var(--tag-added-bg);
+  color: var(--green-soft);
+  border: 1px solid var(--tag-added-border);
+}
+
+.note {
+  display: block;
+  margin-top: 6px;
+  font-style: italic;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 13.5px;
+  color: var(--text-faint);
+}
+
+.demo-caption {
+  text-align: center;
+  margin-top: 32px;
+  font-family: var(--font-sans);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 15px;
+  color: var(--text-faint);
+  max-width: 680px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.55;
+}
+
+/* ---------- Stats ---------- */
+.stats {
+  padding: 80px 0 64px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--amber) 2%, transparent), transparent);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 56px;
+}
+
+.stat {
+  position: relative;
+}
+.stat::after {
+  content: '';
+  position: absolute;
+  right: -28px;
+  top: 10%;
+  bottom: 10%;
+  width: 1px;
+  background: var(--border);
+}
+.stat:last-child::after { display: none; }
+
+/* Sans-serif numbers — flat baselines, no descender risk. */
+.stat-num {
+  font-family: var(--font-sans);
+  font-size: clamp(54px, 6.5vw, 82px);
+  font-weight: 300;
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+  color: var(--text);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+.stat-figure {
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--amber-glow), var(--amber));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  display: inline-block;
+  filter: drop-shadow(0 0 24px color-mix(in srgb, var(--amber) 28%, transparent));
+  transition: filter 0.3s ease;
+}
+.stat:hover .stat-figure {
+  filter: drop-shadow(0 0 36px color-mix(in srgb, var(--amber) 50%, transparent));
+}
+.stat-unit {
+  font-style: normal;
+  font-size: 0.42em;
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.stat-label {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 30ch;
+}
+.stat-source {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.08em;
+  margin-top: 12px;
+  text-transform: uppercase;
+}
+
+/* ---------- Pull quote ---------- */
+.quote-section {
+  padding: 96px 0;
+  position: relative;
+}
+
+.pullquote {
+  max-width: 880px;
+  margin: 0 auto;
+  position: relative;
+  text-align: center;
+}
+
+.quote-mark {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 100px;
+  line-height: 1;
+  background: linear-gradient(135deg, var(--amber), var(--violet));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: -24px;
+  display: block;
+}
+
+.pullquote-text {
+  font-family: var(--font-sans);
+  font-size: clamp(22px, 3vw, 34px);
+  line-height: 1.36;
+  font-weight: 400;
+  font-style: italic;
+  color: var(--text);
+  margin-bottom: 28px;
+  letter-spacing: -0.018em;
+}
+.pullquote-text strong {
+  font-style: normal;
+  color: var(--amber-text);
+  font-weight: 600;
+  font-size: 0.92em;
+}
+
+.pullquote-attr {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* ---------- Section header ---------- */
+.section-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--amber-text);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.section-eyebrow::before {
+  content: '';
+  width: 24px;
+  height: 1px;
+  background: var(--amber);
+}
+
+.section-title {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: clamp(32px, 4.4vw, 54px);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  margin-bottom: 22px;
+  max-width: 18ch;
+  color: var(--text);
+}
+.section-title em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--amber-text);
+  display: inline-block;
+}
+
+.section-sub {
+  color: var(--text-muted);
+  font-size: 17px;
+  line-height: 1.55;
+  max-width: 56ch;
+  margin-bottom: 56px;
+}
+
+/* ---------- Bento ---------- */
+.how {
+  padding: 96px 0;
+  border-top: 1px solid var(--border);
+}
+
+.bento {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.bento-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+.bento-card:hover {
+  border-color: var(--border-bright);
+  transform: translateY(-2px);
+}
+.bento-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--amber), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.bento-card:hover::before { opacity: 0.6; }
+
+.bento-num {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--amber-text);
+  text-transform: uppercase;
+  margin-bottom: 18px;
+  display: inline-block;
+}
+
+.bento-title {
+  font-family: var(--font-sans);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  margin-bottom: 14px;
+  color: var(--text);
+}
+
+.bento-body {
+  font-size: 14.5px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin-bottom: 24px;
+}
+
+.bento-snippet {
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--amber);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.65;
+}
+.bento-snippet .k { color: var(--amber-text); }
+.bento-snippet .v { color: var(--text); }
+
+/* ---------- Contrast ---------- */
+.contrast {
+  padding: 96px 0;
+  border-top: 1px solid var(--border);
+}
+
+.contrast-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.contrast-col {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 32px;
+  position: relative;
+  overflow: hidden;
+}
+
+.contrast-col.us {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--amber) 6%, var(--bg-card)) 0%,
+    color-mix(in srgb, var(--violet) 4%, var(--bg-card)) 100%);
+  border-color: color-mix(in srgb, var(--amber) 30%, var(--border));
+  box-shadow: 0 0 60px -20px color-mix(in srgb, var(--amber) 25%, transparent);
+}
+.contrast-col.us::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--amber), transparent);
+}
+
+.contrast-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+.contrast-col.us .contrast-name { color: var(--amber-text); }
+
+.contrast-h3 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 22px;
+  margin-bottom: 24px;
+  letter-spacing: -0.022em;
+  color: var(--text);
+}
+
+.contrast-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.contrast-list li {
+  display: flex;
+  gap: 12px;
+  font-size: 14.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  align-items: flex-start;
+}
+.contrast-list li svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.contrast-col.us .contrast-list li { color: var(--text); }
+
+/* ---------- Pricing ---------- */
+.pricing {
+  padding: 96px 0;
+  border-top: 1px solid var(--border);
+}
+
+.price-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.price-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 32px 28px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.price-card.featured {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--amber) 8%, var(--bg-card)) 0%,
+    color-mix(in srgb, var(--violet) 4%, var(--bg-card)) 60%,
+    var(--bg-card) 100%);
+  border-color: color-mix(in srgb, var(--amber) 40%, var(--border));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--amber) 10%, transparent) inset,
+    0 0 80px -20px color-mix(in srgb, var(--amber) 35%, transparent);
+}
+
+.price-badge {
+  position: absolute;
+  top: -10px;
+  left: 28px;
+  background: linear-gradient(135deg, var(--amber), var(--amber-glow));
+  color: white;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  padding: 4px 10px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.price-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--text-faint);
+  margin-bottom: 14px;
+  text-transform: uppercase;
+}
+
+/* Sans-serif numbers, generous line-height — descender-proof. */
+.price-amount {
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: 60px;
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+  margin-bottom: 6px;
+  color: var(--text);
+  display: flex;
+  align-items: baseline;
+}
+.price-amount-currency {
+  font-size: 0.55em;
+  color: var(--text-muted);
+  margin-right: 2px;
+  font-weight: 400;
+}
+.price-amount-figure {
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--amber-glow), var(--amber));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  display: inline-block;
+}
+.price-amount-figure.plain {
+  background: none;
+  -webkit-text-fill-color: var(--text);
+  color: var(--text);
+}
+
+.price-unit {
+  font-size: 13px;
+  color: var(--text-faint);
+  margin-bottom: 28px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+.price-card ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-grow: 1;
+}
+.price-card li {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 10px;
+  line-height: 1.45;
+  align-items: flex-start;
+}
+.price-card li::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  background: var(--amber);
+  border-radius: 50%;
+  margin-top: 7px;
+  flex-shrink: 0;
+}
+.price-card.featured li { color: var(--text); }
+.price-card li strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.price-card.featured li strong {
+  color: var(--amber-text);
+}
+.contrast-list li strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.contrast-col.us .contrast-list li strong {
+  color: var(--amber-text);
+}
+
+/* ---------- Signup ---------- */
+.signup {
+  padding: 100px 0;
+  border-top: 1px solid var(--border);
+  position: relative;
+}
+
+.signup::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--amber), transparent);
+}
+
+.form-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 80px;
+  align-items: start;
+}
+
+.form-pitch h2 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: clamp(36px, 4.4vw, 56px);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  margin-bottom: 24px;
+  color: var(--text);
+}
+.form-pitch h2 em {
+  font-style: normal;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--amber-glow), var(--violet));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  display: inline-block;
+}
+
+.form-pitch p {
+  font-size: 17px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin-bottom: 18px;
+  max-width: 42ch;
+}
+
+.form-pitch .form-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  letter-spacing: 0.06em;
+  margin-top: 28px;
+  text-transform: uppercase;
+}
+
+form.waitlist {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 32px;
+}
+
+.field { margin-bottom: 22px; }
+
+.field label.field-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+.field input[type="email"] {
+  width: 100%;
+  background: color-mix(in srgb, var(--bg) 50%, transparent);
+  border: 1px solid var(--border);
+  padding: 12px 14px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  color: var(--text);
+  outline: none;
+  border-radius: 8px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.field input[type="email"]:focus {
+  border-color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 4%, var(--bg));
+}
+.field input[type="email"]::placeholder { color: var(--text-faint); }
+
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin: 0;
+  transition: all 0.15s ease;
+}
+.options input[type="checkbox"], .options input[type="radio"] {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--text-faint);
+  display: inline-block;
+  position: relative;
+  margin: 0;
+  border-radius: 3px;
+  background: transparent;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.options input[type="radio"] { border-radius: 50%; }
+.options input:checked {
+  background: var(--amber);
+  border-color: var(--amber);
+}
+.options input[type="checkbox"]:checked::after {
+  content: '✓';
+  color: white;
+  font-size: 9px;
+  position: absolute;
+  top: -2px;
+  left: 1px;
+  font-weight: 700;
+}
+.options label:hover { border-color: var(--border-bright); color: var(--text); }
+.options label:has(input:checked) {
+  border-color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+  color: var(--text);
+}
+
+button.submit {
+  background: var(--text);
+  color: var(--bg);
+  border: none;
+  padding: 14px 24px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 8px;
+  border-radius: 10px;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+button.submit:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 32px color-mix(in srgb, var(--amber) 35%, transparent);
+}
+
+.form-fine {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  text-align: center;
+  margin-top: 14px;
+  letter-spacing: 0.04em;
+}
+
+.success {
+  display: none;
+  text-align: center;
+  padding: 60px 30px;
+}
+.success h3 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 28px;
+  color: var(--amber-text);
+  margin-bottom: 12px;
+  letter-spacing: -0.02em;
+}
+
+/* ---------- Footer ---------- */
+footer {
+  padding: 36px 0 56px;
+  border-top: 1px solid var(--border);
+}
+footer .wrap {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 900px) {
+  .stats-grid { grid-template-columns: 1fr; gap: 36px; }
+  .stat::after { display: none; }
+  .bento { grid-template-columns: 1fr; }
+  .contrast-grid { grid-template-columns: 1fr; }
+  .price-grid { grid-template-columns: 1fr; }
+  .form-layout { grid-template-columns: 1fr; gap: 40px; }
+  .terminal-body { padding: 20px 18px 24px; }
+  .doc-title { font-size: 19px; }
+  .action-row { font-size: 13.5px; }
+  .quote-mark { font-size: 70px; margin-bottom: -16px; }
+}
+
+/* ---------- Stagger entrance ---------- */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.hero > .wrap > * {
+  animation: rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.hero .eyebrow { animation-delay: 0s; }
+.hero h1.headline { animation-delay: 0.08s; }
+.hero .lede { animation-delay: 0.18s; }
+.hero .hero-cta { animation-delay: 0.28s; }
+.hero .hero-meta { animation-delay: 0.38s; }
+.hero .demo-container { animation-delay: 0.5s; animation-duration: 1s; }
+
+@keyframes shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+h1.headline em {
+  background-size: 200% 200%;
+  animation: shimmer 8s ease-in-out infinite;
+}
+</style>
+</head>
+<body>
+
+<div class="ambient"></div>
+
+<header class="nav">
+  <div class="nav-inner">
+    <div class="logo">
+      <span class="logo-dot"></span>
+      Polish
+    </div>
+    <div class="nav-actions">
+      <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+        <svg class="sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        <svg class="moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+      <a href="#waitlist" class="nav-cta">Join waitlist →</a>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="wrap">
+    <div class="eyebrow">
+      <span class="eyebrow-dot"></span>
+      A verification layer for AI meeting notes
+    </div>
+
+    <h1 class="headline">Don't send another AI summary you haven't <em>verified</em>.</h1>
+
+    <p class="lede">
+      Polish cross-checks your AI meeting summary against the original transcript and flags every <strong>hallucinated action item</strong>, <strong>missing decision</strong>, and <strong>meaning drift</strong> before you hit send. Works with Otter, Fathom, Granola, Zoom, Teams, and any tool that exports text.
+    </p>
+
+    <div class="hero-cta">
+      <a href="#waitlist" class="btn-primary">
+        Join the waitlist
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+      <a href="#how" class="btn-ghost">See how it works →</a>
+    </div>
+
+    <div class="hero-meta">
+      <span>Shipping soon</span>
+      <span>No bot in your meeting</span>
+      <span>Per-check pricing</span>
+    </div>
+
+    <div class="demo-container">
+      <div class="demo-glow"></div>
+      <div class="terminal">
+        <div class="terminal-header">
+          <div class="terminal-dots"><span></span><span></span><span></span></div>
+          <div class="terminal-title"><strong>polish</strong> · verify-summary.docx <span style="color: var(--text-faint)">— 4 issues found</span></div>
+        </div>
+        <div class="terminal-body">
+          <div class="doc-meta">
+            <span class="bright">Q3 Roadmap Sync — Acme &amp; Northwind</span>
+            <span style="color: var(--text-faint)">·</span>
+            <span>OCT 14 · 47 MIN · 6 ATTENDEES</span>
+            <span style="color: var(--text-faint)">·</span>
+            <span>SOURCE: OTTER.AI</span>
+          </div>
+
+          <p class="doc-title">Action items</p>
+          <p class="doc-summary">The team discussed Q3 priorities and aligned on launch timing. Marketing committed to a coordinated rollout while engineering reported they were on track for the November target.</p>
+
+          <ul class="actions-list">
+            <li class="action-row">
+              <span class="action-id">A1</span>
+              <span class="action-text"><strong>Sarah</strong> will finalize the pricing deck by end of week.</span>
+            </li>
+
+            <li class="action-row hallucinated">
+              <span class="action-id">A2</span>
+              <span class="action-text"><span class="tag removed">Removed</span><strong>Marcus</strong> is going to develop a new client-facing service offering and present it to the board.<span class="note">Hallucinated. Transcript shows Marcus made a joke. The AI flattened a joke into a commitment.</span></span>
+            </li>
+
+            <li class="action-row verify">
+              <span class="action-id">A3</span>
+              <span class="action-text"><span class="tag verify">Verify</span><strong>The team</strong> agreed to ship by mid-November.<span class="note">Confirm exact date with engineering. Two different dates were mentioned.</span></span>
+            </li>
+
+            <li class="action-row added">
+              <span class="action-id">A4</span>
+              <span class="action-text"><span class="tag added">Added</span><strong>Priya</strong> will circulate the security review notes by Tuesday.<span class="note">Found in transcript at 28:14. Missing from original summary entirely.</span></span>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <p class="demo-caption">A2 was hallucinated — Marcus joked about it, the AI made it a commitment. A4 was missed entirely. Polish catches both.</p>
+    </div>
+
+  </div>
+</section>
+
+<!-- Stats -->
+<section class="stats">
+  <div class="wrap">
+    <div class="stats-grid">
+      <div class="stat">
+        <div class="stat-num"><span class="stat-figure">35</span><span class="stat-unit">%</span></div>
+        <div class="stat-label">Action-item hallucination rate even with perfect audio.</div>
+        <div class="stat-source">Source · 2026 field study</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num"><span class="stat-figure">63</span><span class="stat-unit">%</span></div>
+        <div class="stat-label">Of OKR check-ins fail because commitments get missed in summaries.</div>
+        <div class="stat-source">Source · ClearPath Analytics</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num"><span class="stat-figure">15</span><span class="stat-unit">min</span></div>
+        <div class="stat-label">Manual cleanup time per meeting, self-reported by power users.</div>
+        <div class="stat-source">Source · User reviews, 2025—26</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Pull quote -->
+<section class="quote-section">
+  <div class="wrap">
+    <div class="pullquote">
+      <span class="quote-mark">"</span>
+      <p class="pullquote-text">It also somehow decided one participant is going to develop a model for a new service offering and offer it to clients. <strong>That in no way was what was said in the meeting.</strong> To send something out suggesting that would cause issues, not clarify anything.</p>
+      <div class="pullquote-attr">— Zoom AI Companion user · community forum</div>
+    </div>
+  </div>
+</section>
+
+<!-- How it works -->
+<section class="how" id="how">
+  <div class="wrap">
+    <div class="section-eyebrow">02 · Method</div>
+    <h2 class="section-title">Three steps. About <em>ten seconds</em>.</h2>
+    <p class="section-sub">Polish is downstream of every notetaker. Paste in what your AI generated, paste in the transcript, get back a verified deliverable. No bot. No integrations. No ongoing subscription needed.</p>
+
+    <div class="bento">
+      <div class="bento-card">
+        <span class="bento-num">Step 01</span>
+        <h3 class="bento-title">Paste your AI summary</h3>
+        <p class="bento-body">Drop in whatever your notetaker generated — Otter, Fathom, Granola, Zoom AI, Teams Copilot, Fireflies. Source-agnostic. Plain text, markdown, email export, all fine.</p>
+        <div class="bento-snippet">
+          <span class="k">accept</span> <span class="v">.txt .md .docx</span><br>
+          <span class="k">parse</span> <span class="v">any format</span>
+        </div>
+      </div>
+      <div class="bento-card">
+        <span class="bento-num">Step 02</span>
+        <h3 class="bento-title">Paste the transcript</h3>
+        <p class="bento-body">The raw transcript is the source of truth. Polish reads both and reconciles them. Every claim gets traced back to its origin in the transcript, or marked uncertain.</p>
+        <div class="bento-snippet">
+          <span class="k">verify</span> <span class="v">every claim</span><br>
+          <span class="k">against</span> <span class="v">source transcript</span>
+        </div>
+      </div>
+      <div class="bento-card">
+        <span class="bento-num">Step 03</span>
+        <h3 class="bento-title">Get a clean .docx</h3>
+        <p class="bento-body">Polished minutes with audience-tuned tone (client / exec / internal / board), action items table, decisions, open questions, follow-up email draft, and verify markers on anything that needs your eyes before send.</p>
+        <div class="bento-snippet">
+          <span class="k">export</span> <span class="v">.docx .pdf email</span><br>
+          <span class="k">review</span> <span class="v">flagged items</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Why not ChatGPT -->
+<section class="contrast">
+  <div class="wrap">
+    <div class="section-eyebrow">03 · Positioning</div>
+    <h2 class="section-title">Why not just paste it into <em>ChatGPT</em>?</h2>
+    <p class="section-sub">You can. Many do. But generic LLMs won't tell you which lines they're guessing on, and they won't surface what your notetaker missed. That's the whole job.</p>
+
+    <div class="contrast-grid">
+      <div class="contrast-col">
+        <div class="contrast-name">ChatGPT, manual paste</div>
+        <h3 class="contrast-h3">Free, but partial.</h3>
+        <ul class="contrast-list">
+          <li><svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="var(--red)" stroke-width="1.5" stroke-linecap="round"/></svg>No cross-check against the original transcript</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="var(--red)" stroke-width="1.5" stroke-linecap="round"/></svg>No flags on uncertain claims — looks confident either way</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="var(--red)" stroke-width="1.5" stroke-linecap="round"/></svg>No standardized minutes format with action item table</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="var(--red)" stroke-width="1.5" stroke-linecap="round"/></svg>You re-write the same prompt every meeting</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="var(--red)" stroke-width="1.5" stroke-linecap="round"/></svg>No audience presets (client vs exec vs internal)</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="var(--red)" stroke-width="1.5" stroke-linecap="round"/></svg>No follow-up email draft</li>
+        </ul>
+      </div>
+      <div class="contrast-col us">
+        <div class="contrast-name">Polish</div>
+        <h3 class="contrast-h3">$5 per check, fully verified.</h3>
+        <ul class="contrast-list">
+          <li><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8l3 3 7-7" stroke="var(--green)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><strong>Cross-checks</strong> every claim against the transcript you paste</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8l3 3 7-7" stroke="var(--green)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="mono" style="color: var(--amber-text); font-weight: 600;">[VERIFY]</span> markers on anything uncertain — review before send</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8l3 3 7-7" stroke="var(--green)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="mono" style="color: var(--green); font-weight: 600;">[ADDED]</span> markers on commitments your AI missed</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8l3 3 7-7" stroke="var(--green)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><strong>One click.</strong> Polished .docx with proper minutes structure</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8l3 3 7-7" stroke="var(--green)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><strong>Audience presets</strong> baked in</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8l3 3 7-7" stroke="var(--green)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><strong>Follow-up email</strong> written for the right tone</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Pricing -->
+<section class="pricing">
+  <div class="wrap">
+    <div class="section-eyebrow">04 · Pricing</div>
+    <h2 class="section-title">Pay for <em>verification</em>, not for cleanup.</h2>
+    <p class="section-sub">Free tools already format messy summaries into minutes. They don't verify. We do. So that's what you pay for.</p>
+
+    <div class="price-grid">
+      <div class="price-card">
+        <div class="price-name">Free</div>
+        <div class="price-amount"><span class="price-amount-currency">$</span><span class="price-amount-figure plain">0</span></div>
+        <div class="price-unit">forever</div>
+        <ul>
+          <li>Unlimited basic cleanup</li>
+          <li>Markdown export</li>
+          <li>One verification check / month</li>
+          <li>Standard formatting</li>
+        </ul>
+      </div>
+
+      <div class="price-card featured">
+        <div class="price-badge">Recommended</div>
+        <div class="price-name">Per check</div>
+        <div class="price-amount"><span class="price-amount-currency">$</span><span class="price-amount-figure">5</span></div>
+        <div class="price-unit">per verified report · no signup</div>
+        <ul>
+          <li><strong>Full cross-check</strong> against transcript</li>
+          <li><strong>[VERIFY] + [ADDED]</strong> markers</li>
+          <li><strong>Audience preset</strong> (client / exec / internal / board)</li>
+          <li><strong>Polished .docx</strong> + follow-up email draft</li>
+          <li><strong>Pay only when you need it</strong></li>
+        </ul>
+      </div>
+
+      <div class="price-card">
+        <div class="price-name">Pro</div>
+        <div class="price-amount"><span class="price-amount-currency">$</span><span class="price-amount-figure">11</span></div>
+        <div class="price-unit">per month · cancel anytime</div>
+        <ul>
+          <li><strong>Unlimited</strong> verification checks</li>
+          <li>All Per Check features</li>
+          <li><strong>Saved templates</strong> per audience</li>
+          <li><strong>Priority</strong> processing</li>
+          <li><strong>Bulk uploads</strong></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Signup form -->
+<section class="signup" id="waitlist">
+  <div class="wrap">
+    <div class="form-layout">
+      <div class="form-pitch">
+        <div class="section-eyebrow">05 · Waitlist</div>
+        <h2>Be on it <em>first</em>.</h2>
+        <p>Polish ships in the next few weeks. Join the waitlist and get early access plus the first month of Pro free.</p>
+        <p>Four short questions tell me if I'm building the right thing. They take maybe twenty seconds.</p>
+        <div class="form-meta">No spam · Unsubscribe anytime · Your data stays yours</div>
+      </div>
+
+      <form class="waitlist" id="waitlist-form" action="REPLACE_WITH_YOUR_FORM_ENDPOINT" method="POST">
+        <div class="field">
+          <label class="field-label" for="email">Email</label>
+          <input type="email" id="email" name="email" required placeholder="you@company.com" autocomplete="email" />
+        </div>
+
+        <div class="field">
+          <label class="field-label">Which AI notetaker do you currently use? (select all)</label>
+          <div class="options">
+            <label><input type="checkbox" name="tool" value="otter">Otter</label>
+            <label><input type="checkbox" name="tool" value="fathom">Fathom</label>
+            <label><input type="checkbox" name="tool" value="granola">Granola</label>
+            <label><input type="checkbox" name="tool" value="zoom">Zoom AI</label>
+            <label><input type="checkbox" name="tool" value="teams">Teams Copilot</label>
+            <label><input type="checkbox" name="tool" value="fireflies">Fireflies</label>
+            <label><input type="checkbox" name="tool" value="chatgpt">ChatGPT manually</label>
+            <label><input type="checkbox" name="tool" value="other">Other</label>
+            <label><input type="checkbox" name="tool" value="none">None</label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label">How many client/external meetings per week?</label>
+          <div class="options">
+            <label><input type="radio" name="frequency" value="0-2">0—2</label>
+            <label><input type="radio" name="frequency" value="3-5">3—5</label>
+            <label><input type="radio" name="frequency" value="6-10">6—10</label>
+            <label><input type="radio" name="frequency" value="10+">10+</label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label">Would you pay $5 per verification check?</label>
+          <div class="options">
+            <label><input type="radio" name="willingness" value="yes">Yes</label>
+            <label><input type="radio" name="willingness" value="depends">Depends on the output</label>
+            <label><input type="radio" name="willingness" value="prefer-monthly">I'd prefer the monthly</label>
+            <label><input type="radio" name="willingness" value="no">No</label>
+          </div>
+        </div>
+
+        <button type="submit" class="submit">Join the waitlist →</button>
+        <div class="form-fine">First 100 signups get the first month of <strong style="color: var(--amber-text); font-weight: 600;">Pro free</strong>.</div>
+      </form>
+
+      <div class="success" id="success">
+        <h3>You're on the list.</h3>
+        <p style="color: var(--text-muted);">I'll email you the moment Polish is ready. Thanks for the signal — it genuinely helps.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>Polish · A verification layer for AI meeting notes</div>
+    <div>Built by <span style="color: var(--text);">@mike</span> · 2026</div>
+  </div>
+</footer>
+
+<script>
+// ---------- Theme toggle ----------
+(function() {
+  const html = document.documentElement;
+  const toggle = document.getElementById('theme-toggle');
+
+  function getCurrent() {
+    return html.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  }
+
+  function setTheme(theme) {
+    if (theme === 'light') {
+      html.setAttribute('data-theme', 'light');
+    } else {
+      html.removeAttribute('data-theme');
+    }
+    try { localStorage.setItem('polish-theme', theme); } catch(e) {}
+  }
+
+  toggle.addEventListener('click', function() {
+    setTheme(getCurrent() === 'light' ? 'dark' : 'light');
+  });
+
+  if (window.matchMedia) {
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    if (mq.addEventListener) {
+      mq.addEventListener('change', function(e) {
+        try {
+          if (!localStorage.getItem('polish-theme')) {
+            if (e.matches) html.setAttribute('data-theme', 'light');
+            else html.removeAttribute('data-theme');
+          }
+        } catch(_) {
+          if (e.matches) html.setAttribute('data-theme', 'light');
+          else html.removeAttribute('data-theme');
+        }
+      });
+    }
+  }
+})();
+
+// ---------- Form ----------
+const form = document.getElementById('waitlist-form');
+const success = document.getElementById('success');
+
+form.addEventListener('submit', function (e) {
+  const action = form.getAttribute('action');
+  if (!action || action === 'REPLACE_WITH_YOUR_FORM_ENDPOINT') {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(form).entries());
+    data.tools = Array.from(form.querySelectorAll('input[name="tool"]:checked'))
+                      .map(el => el.value);
+    console.log('Form submission (no backend wired yet):', data);
+    form.style.display = 'none';
+    success.style.display = 'block';
+  }
+});
+</script>
+
+</body>
+</html>
