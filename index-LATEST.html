@@ -649,7 +649,7 @@ h1.headline em {
   font-family: var(--font-sans);
   font-size: clamp(54px, 6.5vw, 82px);
   font-weight: 300;
-  line-height: 1.1;
+  line-height: 1.3;
   letter-spacing: -0.04em;
   color: var(--text);
   margin-bottom: 14px;
@@ -657,14 +657,17 @@ h1.headline em {
   align-items: baseline;
   gap: 4px;
   flex-wrap: nowrap;
+  padding-top: 0.1em;
+  overflow: visible;
 }
 .stat-figure {
-  font-weight: 700;
-  background: linear-gradient(135deg, var(--amber-glow), var(--amber));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-weight: 600;
+  color: var(--amber-text);
   display: inline-block;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  font-variant-numeric: lining-nums;
   filter: drop-shadow(0 0 24px color-mix(in srgb, var(--amber) 28%, transparent));
   transition: filter 0.3s ease;
 }
@@ -1003,35 +1006,42 @@ h1.headline em {
   text-transform: uppercase;
 }
 
-/* Sans-serif numbers, generous line-height — descender-proof. */
+/* Plex Sans's bold 1 has a flag that overshoots cap-height. Fixed by:
+   1. Dropping figure from weight 700 to 600 (still reads bold, no overshoot)
+   2. Generous container line-height
+   3. Figure gets display:inline-block + own line-height for its own box
+   4. Top + bottom padding for extra safety on any glyph */
 .price-amount {
   font-family: var(--font-sans);
   font-weight: 300;
   font-size: 60px;
-  line-height: 1.1;
+  line-height: 1.4;
   letter-spacing: -0.035em;
   margin-bottom: 6px;
   color: var(--text);
   display: flex;
   align-items: baseline;
+  padding-top: 0.15em;
+  padding-bottom: 0.05em;
+  overflow: visible;
 }
 .price-amount-currency {
   font-size: 0.55em;
   color: var(--text-muted);
   margin-right: 2px;
   font-weight: 400;
+  line-height: 1;
 }
 .price-amount-figure {
-  font-weight: 700;
-  background: linear-gradient(135deg, var(--amber-glow), var(--amber));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-weight: 600;
+  color: var(--amber-text);
   display: inline-block;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  font-variant-numeric: lining-nums;
 }
 .price-amount-figure.plain {
-  background: none;
-  -webkit-text-fill-color: var(--text);
   color: var(--text);
 }
 
@@ -1074,6 +1084,42 @@ h1.headline em {
 }
 .price-card.featured li strong {
   color: var(--amber-text);
+}
+
+.price-cta {
+  margin-top: 24px;
+  padding: 12px 18px;
+  border-radius: 9px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: -0.005em;
+  text-decoration: none;
+  text-align: center;
+  display: block;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
+}
+.price-cta:hover {
+  border-color: var(--border-bright);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  transform: translateY(-1px);
+}
+.price-card.featured .price-cta {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 22%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.1);
+}
+.price-card.featured .price-cta:hover {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 28%, transparent),
+    0 0 32px color-mix(in srgb, var(--amber) 35%, transparent);
 }
 .contrast-list li strong {
   color: var(--text);
@@ -1560,6 +1606,7 @@ h1.headline em {
           <li>One verification check / month</li>
           <li>Standard formatting</li>
         </ul>
+        <a href="#waitlist" class="price-cta">Get notified →</a>
       </div>
 
       <div class="price-card featured">
@@ -1569,11 +1616,12 @@ h1.headline em {
         <div class="price-unit">per verified report · no signup</div>
         <ul>
           <li><strong>Full cross-check</strong> against transcript</li>
-          <li><strong>[VERIFY] + [ADDED]</strong> markers</li>
-          <li><strong>Audience preset</strong> (client / exec / internal / board)</li>
+          <li><strong>[VERIFY]</strong> + <strong>[ADDED]</strong> markers on every claim</li>
+          <li><strong>Audience presets</strong> for client, exec, internal, board</li>
           <li><strong>Polished .docx</strong> + follow-up email draft</li>
           <li><strong>Pay only when you need it</strong></li>
         </ul>
+        <a href="#waitlist" class="price-cta">Join the waitlist →</a>
       </div>
 
       <div class="price-card">
@@ -1587,6 +1635,7 @@ h1.headline em {
           <li><strong>Priority</strong> processing</li>
           <li><strong>Bulk uploads</strong></li>
         </ul>
+        <a href="#waitlist" class="price-cta">Get early access →</a>
       </div>
     </div>
   </div>
@@ -1604,7 +1653,7 @@ h1.headline em {
         <div class="form-meta">No spam · Unsubscribe anytime · Your data stays yours</div>
       </div>
 
-      <form class="waitlist" id="waitlist-form" action="https://formspree.io/f/mwvyerbr" method="POST">
+      <form class="waitlist" id="waitlist-form" action="REPLACE_WITH_YOUR_FORM_ENDPOINT" method="POST">
         <div class="field">
           <label class="field-label" for="email">Email</label>
           <input type="email" id="email" name="email" required placeholder="you@company.com" autocomplete="email" />
@@ -1713,7 +1762,7 @@ const success = document.getElementById('success');
 
 form.addEventListener('submit', function (e) {
   const action = form.getAttribute('action');
-  if (!action || action === 'https://formspree.io/f/mwvyerbr') {
+  if (!action || action === 'REPLACE_WITH_YOUR_FORM_ENDPOINT') {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(form).entries());
     data.tools = Array.from(form.querySelectorAll('input[name="tool"]:checked'))
